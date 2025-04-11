@@ -2,6 +2,7 @@ import json
 import time
 import logging
 import os  # To use environment variables
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -18,6 +19,23 @@ load_dotenv()
 
 # Facebook Group URL from environment variable
 GROUP_URL = os.getenv("FACEBOOK_GROUP_URL")
+
+# Telegram Bot API Token and Chat ID from environment variable
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+
+# Function to send a message to Telegram
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        'chat_id': CHAT_ID,
+        'text': message
+    }
+    response = requests.post(url, data=payload)
+    if response.status_code == 200:
+        logging.info("[+] Sent message to Telegram successfully.")
+    else:
+        logging.error("[-] Failed to send message to Telegram.")
 
 # Function to setup WebDriver
 def setup_driver():
@@ -83,7 +101,7 @@ def get_latest_post(driver):
 
 def monitor_group():
     """Continuously checks for new posts every minute."""
-    last_sender = None  # To store the sender of the last detected post
+    last_post_sender = None  # To store the sender of the last detected post
     last_post_content = None  # To store the content of the last detected post
 
     while True:
@@ -93,24 +111,22 @@ def monitor_group():
         # Access the group and load cookies
         access_group(driver)
 
+        # Check for new post
         sender_name, post_content = get_latest_post(driver)
-
-        # Check if the current post is different from the last detected post
         if sender_name and post_content:
-            if sender_name != last_sender or post_content != last_post_content:
-                # If different, display the new post and update the last post info
-                print(f"\n[+] New Post Detected:\nSender: {sender_name}\nPost: {post_content}\n")
-                last_sender = sender_name  # Update last sender
+            if sender_name != last_post_sender or post_content != last_post_content:
+                # If different, send a Telegram message and update the last post info
+                message = f"{sender_name}: {post_content}"
+                send_telegram_message(message)  # Send message to Telegram
+                last_post_sender = sender_name  # Update last sender
                 last_post_content = post_content  # Update last post content
             else:
-                print("[-] No new post detected. Same post as last time.")
-        else:
-            logging.warning("[-] No new post found.")
-        
+                logging.info("[-] No new post detected.")
+
         # Close the driver session after each iteration
         driver.quit()
 
-        time.sleep(60)  # Wait for 1 minute before checking again
+        time.sleep(30)  # Wait for 30sec before checking again
 
 if __name__ == "__main__":
     monitor_group()
